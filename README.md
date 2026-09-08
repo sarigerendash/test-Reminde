@@ -1,75 +1,81 @@
-# Tester Guide - Reminders System
+# Reminders System - מדריך לבודק
 
-This guide is intended for a QA tester and explains how to set up the environment, how to run the system, and which users are available for testing.
+תרגיל בית: מערכת תזכורות עם צד שרת ב-.NET Core וצד לקוח ב-Angular.
 
-## Prerequisites
+## דרישות מקדימות
 
-| Component | Required Version | Check |
-|---|---|---|
-| .NET SDK | 10.0 or later | `dotnet --version` |
-| Node.js | 20 or later (recent LTS recommended) | `node --version` |
-| npm | Bundled with Node.js | `npm --version` |
-| Angular CLI | 20.x (installed automatically via `devDependencies`, no global install needed) | - |
+- .NET SDK 10.0 ומעלה
+- Node.js 20 ומעלה
+- Angular 20
 
-The project consists of two parts that must run **at the same time**:
-- **RemindersApi** - Backend server, .NET 10 Minimal API (port 5197)
-- **reminders-app** - Frontend application, Angular 20 (port 4200)
+הפרויקט מורכב משני חלקים שצריכים לרוץ **במקביל**:
+- **RemindersApi** - צד השרת, .NET 10 Minimal API (`http://localhost:5197`)
+- **reminders-app** - צד הלקוח, Angular 20 (`http://localhost:4200`)
 
-## How to Run
+## איך מריצים
 
-### 1. Run the server (Backend)
+### 1. הרצת השרת (Backend)
 
-In a separate terminal:
+בטרמינל נפרד:
 
-```
+```bash
 cd RemindersApi
 dotnet run
 ```
+> שימו לב: מסד הנתונים הוא **In-Memory** - כל המידע (כולל תזכורות שתיצרו) נמחק בכל הפעלה מחדש של השרת.
 
-The server will start at: `http://localhost:5197`
+### 2. הרצת האפליקציה (Frontend)
 
-> Note: the database is **In-Memory** - all data (including reminders you create) is wiped every time the server restarts.
+בטרמינל נוסף:
 
-### 2. Run the application (Frontend)
-
-In another terminal (without closing the first one):
-
-```
+```bash
 cd reminders-app
 npm install
 npm start
 ```
 
-The application will open at: `http://localhost:4200`
+> חשוב: תריצו קודם את השרת ותוודאו שהוא רץ, כי צד הלקוח מוגדר לדבר איתו רק בכתובת `http://localhost:5197` (ה-CORS מוגבל לכתובת הזו).
 
-> Important: start the Backend first and make sure it's running, since the Frontend is configured to talk to it only at `http://localhost:5197` (CORS is restricted to this address).
+## משתמשים לבדיקה
 
-## Test Users
+המערכת מגיעה עם שני משתמשים מוכנים מראש:
 
-The database is seeded with two users by default:
-
-| Username | Password | Role | Permissions |
+| שם משתמש | סיסמה | תפקיד | הרשאות |
 |---|---|---|---|
-| `admin` | `admin123` | Admin | View + create + edit reminders |
-| `viewer` | `viewer123` | Viewer | View only (cannot create or edit) |
+| `admin` | `admin123` | Admin | צפייה + יצירה + עריכה של תזכורות |
+| `viewer` | `viewer123` | Viewer | צפייה בלבד (לא יכול ליצור או לערוך) |
 
-Use the login screen in the app with one of these users. It's recommended to test with both users to confirm that the `viewer` role's read-only restriction is actually enforced (the server rejects it even if the UI doesn't block it).
+## החלטות טכנולוגיה וארכיטקטורה
 
-## Reminder Status Lifecycle
+### צד שרת (.NET)
 
-After a reminder is created, its status changes automatically:
+בניתי את זה כתרגיל בית ולא כפרויקט ענק, אז בכוונה לא הוספתי שכבות מיותרות. המבנה מסודר לפי תפקיד: `Model` (איך הנתונים נראים), `Data` (החיבור למסד הנתונים), `Contracts` (הממשקים), `Services` (המימוש בפועל, כולל שירות הרקע), ו-`Apis` (ה-endpoints עצמם). בחרתי לא להשתמש ב-Repository Pattern ולתת ל-Services לפנות ישירות ל-DbContext - בפרויקט בגודל הזה שכבה נוספת רק הייתה מוסיפה בירוקרטיה בלי תועלת אמיתית.
+**פירוט מלא ומורחב יותר על הארכיטקטורה נמצא בקובץ `RemindersApi/README.md`.**
 
-1. **Pending** - immediately after creation.
-2. **Running** - a background service on the server checks every 30 seconds for pending reminders and moves them to this state. This stage lasts about 10 seconds.
-3. **Success / Failed** - at the end of the 10 seconds, the server "flips a coin" (random 50/50) and sets the final status. There is currently no real business logic behind the failure - it's a simulation.
+### צד לקוח (Angular)
 
-The Frontend automatically refreshes the list every 3 seconds, so you can watch all status stages in real time without manually refreshing the page.
+בחרתי ב-**Angular 20** כי רציתי לעבוד עם היכולות החדשות - standalone components, ו-Signals לניהול State, במקום גישות ישנות יותר. עשיתי מבנה קטן ומסודר.
 
-## Things Worth Testing
+**ניהול State** - לא השתמשתי ב-store נפרד, כי זה פרויקט קטן שמספיק לו להתנהל עם Signal פשוט: כשמשהו משתנה, ה-signal מתעדכן וכל מי שמשתמש בו ב-template מתעדכן אוטומטית. לפרויקט בגודל הזה זה נראה לי מספיק ופשוט יותר מלהכניס ספריית state בנפרד.
 
-- Create a reminder with the `admin` user and follow all status stages (Pending → Running → Success/Failed).
-- Try to create/edit a reminder with the `viewer` user - it should fail (403/error message).
-- Edit an existing reminder with `admin`.
-- Different frequencies (`Once`, `Daily`, `Weekly`, `Monthly`) and the `FutureRunsCount` field.
-- Behavior when the server isn't running (a friendly error message in the app).
-- Refreshing the page/closing the browser - whether you need to log in again (depends on how the token is stored).
+## הנחות עבודה
+
+כמה מקומות שההוראות היו פתוחות, וההחלטה שלי:
+
+- **תזמון ה-Background Service** - לא היה מוגדר בדרישות, אז בחרתי זמנים שיאפשרו לראות את כל מחזור החיים בזמן סביר בלי לחכות יותר מדי (פירוט מלא בסעיף "מחזור החיים של תזכורת" בהמשך).
+- **שמירת ה-Token** ב-localStorage בצד הלקוח (ולא למשל ב-cookie) - כדי לפשט את הבדיקה, כולל מה שקורה ברענון דף.
+- **מסד נתונים In-Memory** במקום מסד אמיתי - לנוחות ההרצה של הבודק, כפי שהומלץ בהוראות.
+- **CORS** מוגבל אך ורק לכתובת `localhost:4200`/`localhost:5197` - בהנחה שהבדיקה תתבצע מקומית בלבד.
+
+## שקיפות על שימוש בכלי AI
+
+השתמשתי בכלי AI בכל שלבי העבודה. בהתחלה התייעצתי עם Gemini כדי להבין איך לגשת למשימה - איך לפרק אותה למשימות קטנות וסדר עבודה הגיוני. את מימוש הפרויקט עצמו - כתיבת הקוד, ההחלטות הארכיטקטוניות, הדיבוג - עשיתי יחד עם Claude, דרך התוסף שלו ב-VS Code.
+
+## מחזור החיים של תזכורת
+אחרי שתזכורת נוצרת, הסטטוס שלה משתנה אוטומטית:
+1. **Pending** - מיד עם היצירה.
+2. **Running** - שירות הרקע בודק כל 30 שניות תזכורות ב-Pending ומעביר אותן למצב הזה. השלב הזה נמשך כ-10 שניות.
+3. **Success / Failed** - בסוף ה-10 שניות, השרת  (50/50 רנדומלי) וקובע את הסטטוס הסופי. אין כרגע לוגיקה עסקית אמיתית מאחורי כישלון - זו סימולציה.
+
+צד הלקוח מרענן את הרשימה כל 3 שניות אוטומטית, כך שאפשר לראות את כל השלבים בזמן אמת בלי לרענן ידנית.
+כתבתי בעברית , בכל אופן משטרת ישראל :) 
